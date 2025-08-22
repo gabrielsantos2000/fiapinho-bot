@@ -131,7 +131,7 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
    BOT_PREFIX=!
    
    # Webhook Configuration
-   WEBHOOK_INTERVAL_MINUTES=60
+   WEBHOOK_INTERVAL_HOURS=60
    MAX_LOGIN_RETRIES=3
    
    # Logging
