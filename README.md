@@ -116,27 +116,28 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
    
    Edite o arquivo `.env` com suas configurações:
    ```env
-   # Discord Bot Configuration
-   DISCORD_BOT_TOKEN=seu_token_aqui
-   DISCORD_MONITORING_CHANNEL_ID=id_do_canal_monitoria
-   DISCORD_CALENDAR_CHANNEL_ID=id_do_canal_calendario
-   
-   # FIAP Credentials  
-   FIAP_USERNAME=seu_usuario_fiap
-   FIAP_PASSWORD=sua_senha_fiap
-   FIAP_LOGIN_URL=https://on.fiap.com.br/index.php
-   FIAP_API_BASE=https://on.fiap.com.br/lib/ajax/service.php
-   
-   # Bot Configuration
-   BOT_PREFIX=!
-   
-   # Webhook Configuration
-   WEBHOOK_INTERVAL_HOURS=60
-   MAX_LOGIN_RETRIES=3
-   
-   # Logging
-   LOG_LEVEL=INFO
-   LOG_FILE=logs/bot.log
+  # Discord Bot Configuration
+      DISCORD_BOT_TOKEN=seu_token_aqui
+      DISCORD_MONITORING_CHANNEL_ID=id_do_canal_monitoria
+      DISCORD_CALENDAR_CHANNEL_ID=id_do_canal_calendario
+      GITHUB_URL=https://github.com/gabrielsantos2000/fiapinho-bot
+      
+      # FIAP Credentials
+      FIAP_USERNAME=seu_usuario_fiap
+      FIAP_PASSWORD=sua_senha_fiap
+      FIAP_LOGIN_URL=https://on.fiap.com.br/index.php
+      FIAP_API_BASE=https://on.fiap.com.br/lib/ajax/service.php
+      
+      # Bot Configuration
+      BOT_PREFIX=!
+      
+      # Webhook Configuration
+      WEBHOOK_INTERVAL_HOURS=60
+      MAX_LOGIN_RETRIES=3
+      
+      # Logging
+      LOG_LEVEL=INFO
+      LOG_FILE=logs/bot.log
    ```
 
 4. **Execute o bot**
