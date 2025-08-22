@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Fiapinho Discord Bot (Alternative version with Cogs)
+Fiapinho Discord Bot
 A Discord bot for FIAP College students to manage and sync calendar events.
 
 This version demonstrates how to use Cogs for better command organization.
@@ -16,7 +15,7 @@ import discord
 from discord.ext import commands, tasks
 
 from app.webhooks.webhook import WebhookManager
-from app.utils.colors import StatusColors
+from app.enum.colors import StatusColors
 
 # Load environment variables
 load_dotenv()
@@ -48,10 +47,10 @@ class FiapinhoBot(commands.Bot):
         intents.message_content = True
 
         super().__init__(
-            command_prefix=os.getenv('BOT_PREFIX', '!'),
+            command_prefix=os.getenv('BOT_PREFIX', '/'),
             intents=intents,
             description='Fiapinho - Discord bot for FIAP College students',
-            help_command=None  # We'll create a custom help command
+            help_command=None
         )
 
         self.webhook_manager = WebhookManager(self)
@@ -88,6 +87,14 @@ class FiapinhoBot(commands.Bot):
         """Called when the bot has successfully logged in."""
         self.logger.info(f'{self.user} has connected to Discord!')
         self.logger.info(f'Bot is in {len(self.guilds)} guilds')
+        
+        # Debug: List all commands
+        all_commands = [cmd.name for cmd in self.commands]
+        self.logger.info(f'Loaded commands: {all_commands}')
+        
+        # Debug: List all cogs
+        loaded_cogs = list(self.cogs.keys())
+        self.logger.info(f'Loaded cogs: {loaded_cogs}')
 
         # Set bot status
         await self.change_presence(
@@ -100,7 +107,7 @@ class FiapinhoBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         """Global error handler for commands."""
         if isinstance(error, commands.CommandNotFound):
-            return  # Ignore command not found errors
+            return
 
         self.logger.error(f'Command error in {ctx.command}: {error}')
 
@@ -108,11 +115,11 @@ class FiapinhoBot(commands.Bot):
         embed = discord.Embed(
             title="❌ Erro no Comando",
             description=f"Ocorreu um erro: {str(error)}",
-            color=StatusColors.ERROR
+            color=StatusColors.ERROR.value
         )
         await ctx.send(embed=embed)
 
-    @tasks.loop(minutes=int(os.getenv('WEBHOOK_INTERVAL_MINUTES', '60')))
+    @tasks.loop(hours=int(os.getenv('WEBHOOK_INTERVAL_HOURS', '24')))
     async def sync_calendar_task(self):
         """Periodic task to sync FIAP calendar events."""
         try:
@@ -135,7 +142,7 @@ class FiapinhoBot(commands.Bot):
 
     # ==================== ADMIN COMMANDS ====================
 
-    @commands.command(name='reload', hidden=True)
+    @commands.command(name='reload', hidden=False)
     @commands.is_owner()
     async def reload_cog(self, ctx, cog_name: str):
         """Reload a specific cog (Owner only)."""
@@ -144,14 +151,14 @@ class FiapinhoBot(commands.Bot):
             embed = discord.Embed(
                 title="✅ Cog Recarregado",
                 description=f"Cog '{cog_name}' recarregado com sucesso!",
-                color=StatusColors.SUCCESS
+                color=StatusColors.SUCCESS.value
             )
             await ctx.send(embed=embed)
         except Exception as e:
             embed = discord.Embed(
                 title="❌ Erro ao Recarregar",
                 description=f"Erro ao recarregar cog '{cog_name}': {str(e)}",
-                color=StatusColors.ERROR
+                color=StatusColors.ERROR.value
             )
             await ctx.send(embed=embed)
 
@@ -164,14 +171,14 @@ class FiapinhoBot(commands.Bot):
             embed = discord.Embed(
                 title="✅ Cog Carregado",
                 description=f"Cog '{cog_name}' carregado com sucesso!",
-                color=StatusColors.SUCCESS
+                color=StatusColors.SUCCESS.value
             )
             await ctx.send(embed=embed)
         except Exception as e:
             embed = discord.Embed(
                 title="❌ Erro ao Carregar",
                 description=f"Erro ao carregar cog '{cog_name}': {str(e)}",
-                color=StatusColors.ERROR
+                color=StatusColors.ERROR.value
             )
             await ctx.send(embed=embed)
 
@@ -184,14 +191,14 @@ class FiapinhoBot(commands.Bot):
             embed = discord.Embed(
                 title="✅ Cog Descarregado",
                 description=f"Cog '{cog_name}' descarregado com sucesso!",
-                color=StatusColors.SUCCESS
+                color=StatusColors.SUCCESS.value
             )
             await ctx.send(embed=embed)
         except Exception as e:
             embed = discord.Embed(
                 title="❌ Erro ao Descarregar",
                 description=f"Erro ao descarregar cog '{cog_name}': {str(e)}",
-                color=StatusColors.ERROR
+                color=StatusColors.ERROR.value
             )
             await ctx.send(embed=embed)
 
@@ -204,7 +211,7 @@ class FiapinhoBot(commands.Bot):
         embed = discord.Embed(
             title="📦 Cogs Carregados",
             description="Lista de todos os cogs carregados:",
-            color=StatusColors.INFO_GREEN
+            color=StatusColors.INFO_GREEN.value
         )
 
         if loaded_cogs:
@@ -223,7 +230,7 @@ class FiapinhoBot(commands.Bot):
         await ctx.send(embed=embed)
 
     # Custom help command
-    @commands.command(name='help')
+    @commands.command(name='help_fiapinho')
     async def help_command(self, ctx, *, command_name: str = None):
         """Custom help command with better formatting."""
         if command_name:
@@ -236,7 +243,7 @@ class FiapinhoBot(commands.Bot):
             embed = discord.Embed(
                 title=f"❓ Ajuda: {command.name}",
                 description=command.help or "Sem descrição disponível",
-                color=StatusColors.INFO_GREEN
+                color=StatusColors.INFO_GREEN.value
             )
 
             if command.usage:
@@ -257,19 +264,29 @@ class FiapinhoBot(commands.Bot):
             embed = discord.Embed(
                 title="🤖 Comandos do Fiapinho Bot",
                 description="Lista de comandos disponíveis:",
-                color=StatusColors.INFO_GREEN
+                color=StatusColors.INFO_GREEN.value
             )
 
+            # Show main bot commands
+            main_commands = [cmd.name for cmd in self.commands if not cmd.hidden]
+            if main_commands:
+                embed.add_field(
+                    name="📂 Comandos Principais",
+                    value=", ".join(f"`{cmd}`" for cmd in main_commands),
+                    inline=False
+                )
+            
             # Group commands by cog
             for cog_name, cog in self.cogs.items():
-                if cog_name in ['FIAPCog', 'UtilityCog']:  # Only show main cogs
-                    commands_list = [cmd.name for cmd in cog.get_commands() if not cmd.hidden]
-                    if commands_list:
-                        embed.add_field(
-                            name=f"📂 {cog_name.replace('Cog', '')}",
-                            value=", ".join(f"`{cmd}`" for cmd in commands_list),
-                            inline=False
-                        )
+                commands_list = [cmd.name for cmd in cog.get_commands() if not cmd.hidden]
+                if commands_list:
+                    # Clean up cog name for display
+                    display_name = cog_name.replace('Cog', '').replace('Fiapinho', 'FIAP')
+                    embed.add_field(
+                        name=f"📂 {display_name}",
+                        value=", ".join(f"`{cmd}`" for cmd in commands_list),
+                        inline=False
+                    )
 
             embed.set_footer(text="Use !help <comando> para mais detalhes sobre um comando específico")
 

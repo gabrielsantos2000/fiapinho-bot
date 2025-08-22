@@ -1,8 +1,11 @@
-class FiapColors:
+from enum import Enum
+
+
+class FiapColors(Enum):
     RED = 0xed6465
 
 
-class StatusColors:
+class StatusColors(Enum):
     SUCCESS = 0x00ff00
     ERROR = 0xff0000
     ALERT = 0xffa500

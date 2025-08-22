@@ -7,11 +7,12 @@ Contains general utility commands like ping, status, help, etc.
 import logging
 import os
 from datetime import datetime
+from typing import Tuple
 
 import discord
 from discord.ext import commands
 
-from app.utils.colors import StatusColors
+from app.enum.colors import StatusColors
 
 
 class UtilityCog(commands.Cog):
@@ -24,11 +25,11 @@ class UtilityCog(commands.Cog):
     @commands.command(name='ping', help='Check bot response time')
     async def ping(self, ctx):
         """Simple ping command."""
-        latency = round(self.bot.latency * 1000)
+        latency, status = self.get_latency()
         embed = discord.Embed(
             title="🏓 Pong!",
             description=f"Latência: {latency}ms",
-            color=StatusColors.SUCCESS if latency < 100 else StatusColors.ALERT if latency < 200 else StatusColors.ERROR
+            color=status
         )
         await ctx.send(embed=embed)
 
@@ -41,13 +42,14 @@ class UtilityCog(commands.Cog):
 
             embed = discord.Embed(
                 title="🤖 Status do Fiapinho Bot",
-                color=StatusColors.INFO_GREEN
+                color=StatusColors.INFO_GREEN.value
             )
 
+            latency = self.get_latency()
             # Bot info
             embed.add_field(
                 name="📊 Bot Status",
-                value=f"🟢 Online\n🏓 Ping: {round(self.bot.latency * 1000)}ms",
+                value=f"🟢 Online\n\n🏓 Ping: {latency[0]}ms",
                 inline=True
             )
 
@@ -61,7 +63,7 @@ class UtilityCog(commands.Cog):
             # Sync task status
             task_status = "🟢 Ativo" if self.bot.sync_calendar_task.is_running() else "🔴 Parado"
             embed.add_field(
-                name="⏰ Task de Sincronização",
+                name="⏰ Task de Sincronização \n\n",
                 value=task_status,
                 inline=True
             )
@@ -78,7 +80,7 @@ class UtilityCog(commands.Cog):
                     last_exec_str = "Nunca executado"
 
                 embed.add_field(
-                    name="📅 Última Sincronização",
+                    name="📅 Última Sincronização do Calendário",
                     value=last_exec_str,
                     inline=False
                 )
@@ -95,10 +97,9 @@ class UtilityCog(commands.Cog):
         embed = discord.Embed(
             title="🤖 Fiapinho Bot",
             description="Bot para estudantes da FIAP - Gestão de eventos e calendário",
-            color=StatusColors.INFO_GREEN
+            color=StatusColors.INFO_GREEN.value
         )
 
-        # Bot stats
         total_members = sum(guild.member_count for guild in self.bot.guilds)
 
         embed.add_field(
@@ -133,7 +134,7 @@ class UtilityCog(commands.Cog):
             embed = discord.Embed(
                 title="⏰ Uptime",
                 description="Tempo de atividade não disponível",
-                color=StatusColors.ALERT
+                color=StatusColors.ALERT.value
             )
         else:
             uptime = datetime.now() - self.bot.start_time
@@ -146,7 +147,7 @@ class UtilityCog(commands.Cog):
             embed = discord.Embed(
                 title="⏰ Uptime",
                 description=f"Bot ativo há: **{uptime_str}**",
-                color=StatusColors.SUCCESS
+                color=StatusColors.SUCCESS.value
             )
 
         await ctx.send(embed=embed)
@@ -164,10 +165,9 @@ class UtilityCog(commands.Cog):
         embed = discord.Embed(
             title="📋 Versão",
             description=f"Fiapinho Bot v{version}",
-            color=StatusColors.INFO_GREEN
+            color=StatusColors.INFO_GREEN.value
         )
 
-        # Add changelog or features
         embed.add_field(
             name="✨ Recursos Principais",
             value="• Sincronização automática de calendário e eventos FIAP"
@@ -184,21 +184,21 @@ class UtilityCog(commands.Cog):
             embed = discord.Embed(
                 title="⏳ Comando em Cooldown",
                 description=f"Tente novamente em {error.retry_after:.1f} segundos",
-                color=StatusColors.ALERT
+                color=StatusColors.ALERT.value
             )
             await ctx.send(embed=embed)
         elif isinstance(error, commands.MissingPermissions):
             embed = discord.Embed(
                 title="❌ Permissões Insuficientes",
                 description="Você não tem permissão para usar este comando",
-                color=StatusColors.ERROR
+                color=StatusColors.ERROR.value
             )
             await ctx.send(embed=embed)
         elif isinstance(error, commands.BotMissingPermissions):
             embed = discord.Embed(
                 title="❌ Bot sem Permissões",
                 description="O bot não tem permissões necessárias para executar este comando",
-                color=StatusColors.ERROR
+                color=StatusColors.ERROR.value
             )
             await ctx.send(embed=embed)
 
@@ -206,6 +206,13 @@ class UtilityCog(commands.Cog):
     async def on_ready(self):
         """Called when the cog is ready."""
         self.logger.info("Utility Cog loaded successfully")
+
+
+    def get_latency(self) -> Tuple[int, int]:
+        latency = round(self.bot.latency * 1000)
+        status = StatusColors.SUCCESS.value \
+            if latency < 100 else StatusColors.ALERT.value if latency < 200 else StatusColors.ERROR.value
+        return latency, status
 
 
 async def setup(bot):

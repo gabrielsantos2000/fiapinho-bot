@@ -3,7 +3,8 @@ import logging
 
 import discord
 
-from app.utils.colors import FiapColors, StatusColors
+from app.enum.colors import FiapColors, StatusColors
+from app.enum.discord.roles import Roles
 from discord.ext import commands
 
 class FiapinhoCog(commands.Cog):
@@ -22,13 +23,13 @@ class FiapinhoCog(commands.Cog):
         ]
 
     @commands.group(name="fiap", help="Comandos relacionados a Fiap")
-    async def fiap_groud(self, ctx):
+    async def fiap_group(self, ctx):
         """Group command for Fiapinho commands."""
         if ctx.invoked_subcommand is None:
             embed = discord.Embed(
                 title="📚 Comandos Fiapinho",
                 description=f"Use `{self.prefix}fiap <subcommando>` para acessar as funcionalidades do Fiapinho:",
-                color=FiapColors.RED
+                color=FiapColors.RED.value
             )
 
             for cmd, desc in self.subcommands_fiap_group:
@@ -37,14 +38,16 @@ class FiapinhoCog(commands.Cog):
                     value=desc,
                     inline=False
                 )
+            
+            await ctx.send(embed=embed)
 
-    @fiap_groud.command(name='sync_calendar', help='Realiza a sincronização do calendário')
-    async def sync_calendar(self, ctx):
+    @fiap_group.command(name='sync_calendar', help='Realiza a sincronização do calendário')
+    async def sync_calendar(self, ctx:commands.Context):
         """Manually trigger calendar sync."""
-        if ctx.author.has_permissions(administrator=False):
+        if not ctx.author.get_role(Roles.ADMINISTRATOR.value):
             embed = discord.Embed(
                 title="❌ Esse comando só pode ser executado por administradores",
-                color=FiapColors.RED
+                color=FiapColors.RED.value
             )
 
             await ctx.send(embed=embed)
@@ -52,29 +55,27 @@ class FiapinhoCog(commands.Cog):
 
         self.logger.info(f"Manual sync requested by {ctx.author}")
 
-        # Send initial response
         embed = discord.Embed(
             title="🔄 Sincronização Manual",
             description="Iniciando sincronização do calendário FIAP...",
-            color=StatusColors.INFO_BLUE
+            color=StatusColors.INFO_BLUE.value
         )
         message = await ctx.send(embed=embed)
 
         try:
-            # Execute sync
-            result = await self.bot.webhook_manager.sync_calendar()
+            result = await self.bot.webhook_manager.sync_calendar(resync=True)
 
             if result:
                 embed = discord.Embed(
                     title="✅ Sincronização Concluída",
                     description="Calendário FIAP sincronizado com sucesso!",
-                    color=StatusColors.SUCCESS
+                    color=StatusColors.SUCCESS.value
                 )
             else:
                 embed = discord.Embed(
                     title="❌ Falha na Sincronização",
                     description="Erro durante a sincronização. Verifique os logs para detalhes.",
-                    color=StatusColors.SUCCESS
+                    color=StatusColors.ERROR.value
                 )
 
             await message.edit(embed=embed)
@@ -84,9 +85,22 @@ class FiapinhoCog(commands.Cog):
             embed = discord.Embed(
                 title="⚠️ Erro Inesperado",
                 description=f"Ocorreu um erro: {str(e)}",
-                color=StatusColors.SUCCESS
+                color=StatusColors.SUCCESS.value
             )
             await message.edit(embed=embed)
+
+    @fiap_group.command(name='events_montly', description='Exibe os eventos do mês')
+    async def events_montly(self, ctx:commands.Context):
+        """Manually trigger events recentes."""
+        if not ctx.author.get_role(Roles.ADMINISTRATOR.value):
+            embed = discord.Embed(
+                title='❌ Esse comando só pode ser executado por administradores',
+                color=FiapColors.RED.value
+            )
+
+            await ctx.send(embed=embed)
+            return
+
 
 async def setup(bot):
     await bot.add_cog(FiapinhoCog(bot))

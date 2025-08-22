@@ -9,15 +9,20 @@ import os
 import json
 import logging
 import asyncio
+import validators
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Coroutine
+
+import discord
 from discord import Embed
 
 from app.webhooks.core.fiap_auth import FIAPSession, authenticate_fiap
 from .evens_api import FIAPCalendarAPI
 from app.webhooks.core.base import BaseWebhook
-from ...utils.colors import StatusColors
+from app.utils.format_datetime import get_all_days_in_month
+from app.enum.colors import StatusColors, FiapColors
+from app.utils.discord.notifications import FiapinhoNotification
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +42,23 @@ class CalendarSyncWebhook(BaseWebhook):
         super().__init__(bot, 'sync_calendar')
         self.data_dir = Path('app/database')
         self.data_dir.mkdir(exist_ok=True)
+        self.src_images = Path('src/images')
+        self.src_images.mkdir(exist_ok=True)
         self.session: Optional[FIAPSession] = None
         self.api: Optional[FIAPCalendarAPI] = None
+        self.notifications: Optional[List[FiapinhoNotification]] = None
 
     async def execute(self, **kwargs) -> bool:
         """
         Execute calendar synchronization process.
 
         Args:
-            **kwargs: Additional parameters (currently unused)
+            **kwargs: Additional parameters
 
         Returns:
             bool: True if sync was successful
         """
+
         try:
             self.logger.info("Starting calendar synchronization...")
             self.last_execution = datetime.now()
@@ -59,8 +68,9 @@ class CalendarSyncWebhook(BaseWebhook):
                 max_retries=int(os.getenv('MAX_LOGIN_RETRIES', '3'))
             )
 
+            self.notifications = FiapinhoNotification(self.bot)
             if not success:
-                await self._send_auth_failure_notification()
+                await self.notifications.send_auth_failure_notification()
                 return False
 
             self.session = session
@@ -68,7 +78,7 @@ class CalendarSyncWebhook(BaseWebhook):
             self.logger.info("FIAP authentication successful")
 
             # Step 2: Retrieve calendar events
-            events_data = await self._fetch_calendar_events()
+            events_data = await self._fetch_calendar_events(kwargs.get("resync", False))
             if not events_data:
                 self.logger.warning("No events data retrieved")
                 return False
@@ -94,7 +104,7 @@ class CalendarSyncWebhook(BaseWebhook):
             await self._send_error_notification(str(e))
             return False
 
-    async def _fetch_calendar_events(self) -> Optional[Dict[str, Any]]:
+    async def _fetch_calendar_events(self, resync: bool = False) -> Optional[Dict[str, Any]]:
         """
         Fetch calendar events from FIAP API using the panel events endpoint.
 
@@ -107,18 +117,19 @@ class CalendarSyncWebhook(BaseWebhook):
 
             # Try the panel events endpoint first (for today's events)
             self.logger.info("Fetching today's calendar panel events from FIAP...")
-            #events_data = await self.api.get_calendar_panel_events()
-            events_data = await self.api.get_calendar_events()
+            events_data = await self.api.get_calendar_panel_events()
+            #events_data = await self.api.get_calendar_events()
 
-            if 'error' in events_data:
-                self.logger.warning(f"Panel events API error: {events_data['error']}")
+            if 'error' in events_data or resync:
+                msg = f"Panel events API error: {events_data['error']}" if not resync else "Resync calendar events"
+                self.logger.warning(msg)
 
-                # Fallback to regular calendar events (for the current month)
-                self.logger.info("Trying fallback calendar events endpoint...")
-                events_data = await self.api.get_calendar_events()
+                # Fallback to get panel events for all days in the current month
+                self.logger.info("Fetching panel events for all days in current month...")
+                events_data = await self._fetch_monthly_panel_events()
 
-                if 'error' in events_data:
-                    self.logger.error(f"Fallback API also failed: {events_data['error']}")
+                if not events_data or 'error' in events_data:
+                    self.logger.error("Failed to fetch monthly panel events")
                     return None
 
             # Handle the new response format
@@ -153,6 +164,78 @@ class CalendarSyncWebhook(BaseWebhook):
             self.logger.error(f"Error fetching calendar events: {e}")
             return None
 
+    async def _fetch_monthly_panel_events(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch calendar panel events for all days in the current month.
+
+        Returns:
+            Optional[List[Dict[str, Any]]]: List of all events for the month or None if failed
+        """
+        try:
+            if not self.session or not self.api:
+                raise RuntimeError("No active FIAP session or API")
+
+            # Get all days in the current month as timestamps
+            day_timestamps = get_all_days_in_month()
+            all_events = []
+            seen_event_ids = set()
+
+            self.logger.info(f"Fetching panel events for {len(day_timestamps)} days in current month...")
+
+            for i, day_timestamp in enumerate(day_timestamps):
+                try:
+                    self.logger.info(f"Fetching events for day {i+1}/{len(day_timestamps)} (timestamp: {day_timestamp})")
+                    
+                    # Get panel events for this specific day
+                    day_events_data = await self.api.get_calendar_panel_events(time_search=day_timestamp)
+                    
+                    if 'error' in day_events_data:
+                        self.logger.warning(f"Error fetching events for day {i+1}: {day_events_data['error']}")
+                        continue
+
+                    # Process the response format
+                    if isinstance(day_events_data, list) and len(day_events_data) > 0:
+                        response_item = day_events_data[0]
+                        
+                        if isinstance(response_item, dict) and not response_item.get('error', False):
+                            day_events = []
+                            if 'data' in response_item:
+                                day_events = response_item['data']
+                            elif isinstance(response_item, dict):
+                                day_events = [response_item]  # Single event case
+                            
+                            # Add events to the collection, avoiding duplicates
+                            for event in day_events:
+                                event_id = event.get('id')
+                                if event_id and event_id not in seen_event_ids:
+                                    all_events.append(event)
+                                    seen_event_ids.add(event_id)
+                                    
+                            if day_events:
+                                self.logger.info(f"Found {len(day_events)} events for day {i+1} (total: {len(all_events)})")
+                        else:
+                            error_msg = response_item.get('error', 'Unknown error') if isinstance(response_item, dict) else str(response_item)
+                            self.logger.warning(f"API returned error for day {i+1}: {error_msg}")
+                    
+                    # Add delay to avoid overwhelming the API
+                    await asyncio.sleep(0.5)
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error processing day {i+1}: {e}")
+                    continue
+
+            self.logger.info(f"Retrieved {len(all_events)} total unique events from monthly scan")
+            
+            # Return in the expected format
+            return [{
+                'data': all_events,
+                'error': False
+            }]
+
+        except Exception as e:
+            self.logger.error(f"Error fetching monthly panel events: {e}")
+            return None
+
     async def _process_events(self, events_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Process events data and identify new events.
@@ -166,25 +249,71 @@ class CalendarSyncWebhook(BaseWebhook):
         try:
             events = events_data.get('events', [])
             if not events:
+                self.logger.info("No events found in events_data")
                 return []
+
+            self.logger.info(f"Processing {len(events)} total events from API")
 
             # Load existing events
             existing_events = await self._load_existing_events()
-            # Handle 'id' field for existing events
+
             existing_ids = {event.get('id') for event in existing_events if event.get('id')}
+            self.logger.info(f"Found {len(existing_ids)} existing events in database")
+
+            # Deduplicate events from the API response first (in case of duplicates from multiple day queries)
+            unique_events = {}
+            for event in events:
+                event_id = event.get('id')
+                if event_id:
+                    if event_id not in unique_events:
+                        unique_events[event_id] = event
+                    # Keep the event with more complete data (more keys)
+                    elif len(event) > len(unique_events[event_id]):
+                        unique_events[event_id] = event
+
+            events = list(unique_events.values())
+            self.logger.info(f"After deduplication: {len(events)} unique events")
 
             # Filter new events
             new_events = []
             for event in events:
                 event_id = event.get('id')
-                self.logger.info(f"Processando event {event}")
                 if event_id and event_id not in existing_ids:
                     new_events.append(event)
+                    self.logger.debug(f"New event found: {event_id} - {event.get('content', 'No title')}")
+                elif event_id:
+                    self.logger.debug(f"Existing event: {event_id} - {event.get('content', 'No title')}")
+                else:
+                    self.logger.warning(f"Event without ID found: {event}")
 
-            # Save all events (new and existing)
-            await self._save_events(events)
+            # Combine existing events with new unique events for storage
+            all_events_for_storage = []
+            
+            # Add existing events first
+            existing_event_ids = set()
+            for existing_event in existing_events:
+                existing_id = existing_event.get('id')
+                if existing_id:
+                    all_events_for_storage.append(existing_event)
+                    existing_event_ids.add(existing_id)
+            
+            # Add new events that don't already exist
+            for event in events:
+                event_id = event.get('id')
+                if event_id and event_id not in existing_event_ids:
+                    all_events_for_storage.append(event)
+                elif event_id and event_id in existing_event_ids:
+                    # Update existing event with potentially newer data
+                    for i, existing_event in enumerate(all_events_for_storage):
+                        if existing_event.get('id') == event_id:
+                            all_events_for_storage[i] = event
+                            break
 
-            self.logger.info(f"Found {len(new_events)} new events")
+            # Save all events (existing + new/updated)
+            await self._save_events(all_events_for_storage)
+
+            self.logger.info(f"Found {len(new_events)} new events to process")
+            self.logger.info(f"Saved {len(all_events_for_storage)} total events to database")
             return new_events
 
         except Exception as e:
@@ -207,6 +336,7 @@ class CalendarSyncWebhook(BaseWebhook):
             try:
                 event_id = event.get('id')
                 event_type = event.get('type')
+                event_module = event.get('module') if event.get('module') else "conteudosexternos"
 
                 if not event_id or not event_type:
                     # If we don't have both id and type, we can't fetch details
@@ -216,11 +346,11 @@ class CalendarSyncWebhook(BaseWebhook):
 
                 self.logger.info(f"Fetching details for event {event_id} (type: {event_type})")
 
-                # Use the new API with proper parameters
+                # API to get unit event details
                 details = await self.api.get_calendar_event(
                     event_type=event_type,
                     event_id=str(event_id),
-                    module_name="external_content"  # Default module name
+                    module_name=event_module
                 )
 
                 if 'error' not in details:
@@ -234,9 +364,8 @@ class CalendarSyncWebhook(BaseWebhook):
                             else:
                                 event.update(detail_item)
 
-                            # Check for Teams link or streaming information
-                            if 'teams_link' in event or 'streaming_url' in event:
-                                self.logger.info(f"Found streaming info for event {event_id}")
+                            if 'local' in event:
+                                self.logger.info(f"Found local info for event {event_id}")
                         else:
                             error_msg = detail_item.get('error', 'Unknown error') if isinstance(detail_item, dict) else str(detail_item)
                             self.logger.warning(f"API returned error for event {event_id}: {error_msg}")
@@ -298,7 +427,7 @@ class CalendarSyncWebhook(BaseWebhook):
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(events, f, indent=2, ensure_ascii=False, default=str)
 
-            self.logger.info(f" Saved {len(events)} events to {filename}")
+            self.logger.info(f"Saved {len(events)} events to {filename}")
 
         except Exception as e:
             self.logger.error(f"Error saving events: {e}")
@@ -350,8 +479,8 @@ class CalendarSyncWebhook(BaseWebhook):
                 return
 
             for event in events:
-                embed = await self._create_event_embed(event)
-                await channel.send("📅 **Novo evento FIAP detectado!**", embed=embed)
+                embed, images = await self._create_event_embed(event)
+                await channel.send("📅 **Novo evento FIAP detectado!**", embed=embed, files=images)
 
                 # Add delay between messages
                 await asyncio.sleep(1)
@@ -359,8 +488,8 @@ class CalendarSyncWebhook(BaseWebhook):
         except Exception as e:
             self.logger.error(f"Error sending event notifications: {e}")
 
-    @staticmethod
-    async def _create_event_embed(event: Dict[str, Any]) -> Embed:
+
+    async def _create_event_embed(self, event: Dict[str, Any]) -> tuple[Embed, list[Any]]:
         """
         Create Discord embed for an event.
 
@@ -381,19 +510,22 @@ class CalendarSyncWebhook(BaseWebhook):
         embed = Embed(
             title=title,
             description=description,
-            color=StatusColors.INFO_GREEN,
+            color=FiapColors.RED.value,
             timestamp=datetime.now()
         )
 
         # Add event details - handle both timeopen and timestart
-        start_time = event.get('timeopen') or event.get('timestart')
+        start_time = event.get('timeopen')
+        end_time = event.get('timeclose')
         if start_time:
             try:
                 if isinstance(start_time, (int, float)):
                     start_dt = datetime.fromtimestamp(start_time)
+                    end_dt = datetime.fromtimestamp(end_time)
+
                     embed.add_field(
                         name="📅 Data/Hora",
-                        value=start_dt.strftime("%d/%m/%Y às %H:%M"),
+                        value=f'{start_dt.strftime("%d/%m/%Y às %H:%M")} até {end_dt.strftime("%H:%M")}',
                         inline=True
                     )
             except Exception:
@@ -413,7 +545,7 @@ class CalendarSyncWebhook(BaseWebhook):
         if event_type:
             embed.add_field(
                 name="📋 Tipo",
-                value=event_type,
+                value="🛑 LIVE" if event_type == "Live" else event_type,
                 inline=True
             )
 
@@ -426,8 +558,12 @@ class CalendarSyncWebhook(BaseWebhook):
                 inline=False
             )
 
-        # Add Teams link if available
-        teams_link = event.get('local')
+        local = event.get('local')
+        self.logger.info(f"{event}")
+        teams_link = None
+        if validators.url(local):
+            teams_link = local
+
         if teams_link:
             embed.add_field(
                 name="🎥 Link da Transmissão",
@@ -435,41 +571,19 @@ class CalendarSyncWebhook(BaseWebhook):
                 inline=False
             )
 
-        # Add event ID for reference
         event_id = event.get('id')
         if event_id:
             embed.set_footer(text=f"ID do Evento: {event_id}")
 
-        return embed
+        images = [
+            discord.File(self.src_images / "fiap-on.webp", filename=f"fiap-on.webp"),
+            discord.File(self.src_images / "banner-fiap.png", filename=f"banner-fiap.png")
+        ]
 
-    async def _send_auth_failure_notification(self):
-        """Send notification about authentication failure."""
-        try:
-            channel_id = os.getenv('DISCORD_MONITORING_CHANNEL_ID')
-            if not channel_id:
-                return
+        embed.set_image(url="attachment://banner-fiap.png")
+        embed.set_thumbnail(url="attachment://fiap-on.webp")
 
-            channel = self.bot.get_channel(int(channel_id))
-            if not channel:
-                return
-
-            embed = Embed(
-                title="❌ Falha na Autenticação FIAP",
-                description="Não foi possível fazer login na plataforma FIAP após várias tentativas.",
-                color=StatusColors.ERROR,
-                timestamp=datetime.now()
-            )
-
-            embed.add_field(
-                name="🔧 Ação Necessária",
-                value="Verifique as credenciais FIAP nas variáveis de ambiente.",
-                inline=False
-            )
-
-            await channel.send(embed=embed)
-
-        except Exception as e:
-            self.logger.error(f"Error sending auth failure notification: {e}")
+        return embed, images
 
     async def _send_error_notification(self, error_message: str):
         """
@@ -490,7 +604,7 @@ class CalendarSyncWebhook(BaseWebhook):
             embed = Embed(
                 title="⚠️ Erro na Sincronização do Calendário",
                 description=f"Ocorreu um erro durante a sincronização: {error_message}",
-                color=StatusColors.ALERT,
+                color=StatusColors.ALERT.value,
                 timestamp=datetime.now()
             )
 

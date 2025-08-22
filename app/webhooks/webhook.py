@@ -40,7 +40,7 @@ class WebhookManager:
         except Exception as e:
             logger.error(f"Error initializing webhook manager: {e}")
 
-    async def sync_calendar(self) -> bool:
+    async def sync_calendar(self, resync: bool = False) -> bool:
         """
         Execute calendar synchronization webhook.
 
@@ -53,7 +53,7 @@ class WebhookManager:
                 return False
 
             webhook = self.webhooks['sync_calendar']
-            return await webhook.execute()
+            return await webhook.execute(resync=resync)
 
         except Exception as e:
             logger.error(f"Error executing calendar sync: {e}")

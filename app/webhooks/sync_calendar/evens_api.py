@@ -55,7 +55,6 @@ class FIAPCalendarAPI:
         if time_open is None or time_close is None:
             time_open, time_close = get_month_range_timestamps()
 
-        # Prepare JSON payload
         payload = [
             {
                 "index": 0,
@@ -91,7 +90,6 @@ class FIAPCalendarAPI:
         if time_search is None:
             time_search = get_date_timestamp()
 
-        # Prepare JSON payload
         payload = [
             {
                 "index": 0,
@@ -107,14 +105,14 @@ class FIAPCalendarAPI:
         return await self._make_api_request_json(payload)
 
     async def get_calendar_event(self, event_type: str, event_id: str,
-                                 module_name: str = "external_content") -> Dict[str, Any]:
+                                 module_name: str = "conteudosexternos") -> Dict[str, Any]:
         """
         Retrieve specific calendar event details.
 
         Args:
             event_type: Type of the event (e.g., "Live", "Schedule")
             event_id: ID of the event to retrieve
-            module_name: Module name (defaults to "external_content")
+            module_name: Module name (defaults to "conteudosexternos")
 
         Returns:
             Dict[str, Any]: API response data
@@ -122,7 +120,6 @@ class FIAPCalendarAPI:
         if not self.session.is_authenticated or not self.session.sesskey:
             raise RuntimeError("Not authenticated. Session must be logged in.")
 
-        # Prepare JSON payload
         payload = [
             {
                 "index": 0,
@@ -151,10 +148,8 @@ class FIAPCalendarAPI:
             raise RuntimeError("Session not initialized")
 
         try:
-            # Add sesskey to URL parameters
             url = f"{self.session.api_base}?sesskey={self.session.sesskey}"
 
-            # Enhanced headers for JSON POST requests
             headers = {
                 'Content-Type': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

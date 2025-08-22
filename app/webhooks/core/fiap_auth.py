@@ -7,9 +7,11 @@ including session management and credential validation.
 
 import os
 import logging
+
 import aiohttp
 import asyncio
 from typing import Optional, Tuple
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +57,11 @@ class FIAPSession:
             logger.info(f"Login attempt {attempt}/{max_retries}")
 
             try:
-                # Prepare login data
                 login_data = {
                     'username': username,
                     'password': password
                 }
 
-                # Send login request
                 async with self.session.post(
                         self.login_url,
                         data=login_data,
@@ -90,7 +90,6 @@ class FIAPSession:
 
                     # Check if login was successful and extract sesskey from cookies
                     if response.status == 200:
-                        # Get sesskey from cookies
                         cookies = self.session.cookie_jar
                         sesskey = None
 
@@ -107,7 +106,6 @@ class FIAPSession:
                             logger.info(f"Successfully authenticated with FIAP (sesskey: {sesskey[:10]}...)")
                             logger.info(f"Stored {len(cookies)} cookies from login")
 
-                            # Debug: log important cookies
                             important_cookies = ['MoodleSession', 'MOODLEID1_', 'sesskey']
                             for cookie in cookies:
                                 if cookie.key in important_cookies:
@@ -165,3 +163,4 @@ async def authenticate_fiap(username: str = None, password: str = None, max_retr
     else:
         await session.__aexit__(None, None, None)
         return False, None
+
