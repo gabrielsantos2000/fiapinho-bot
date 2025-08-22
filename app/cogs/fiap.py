@@ -47,7 +47,7 @@ class FiapinhoCog(commands.Cog):
     async def sync_calendar(self, ctx:commands.Context):
         """Manually trigger calendar sync."""
         self.logger.info(f"Is owner {not commands.is_owner()}")
-        if not commands.is_owner():
+        if not ctx.author.get_role(Roles.ADMINISTRATOR.value):
             embed = discord.Embed(
                 title="❌ Esse comando só pode ser executado por administradores",
                 color=FiapColors.RED.value
