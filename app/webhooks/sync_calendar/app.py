@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Coroutine
 
 import discord
-from discord import Embed
+from discord import Embed, File
 
 from app.webhooks.core.fiap_auth import FIAPSession, authenticate_fiap
 from .evens_api import FIAPCalendarAPI
@@ -115,10 +115,8 @@ class CalendarSyncWebhook(BaseWebhook):
             if not self.session:
                 raise RuntimeError("No active FIAP session")
 
-            # Try the panel events endpoint first (for today's events)
             self.logger.info("Fetching today's calendar panel events from FIAP...")
             events_data = await self.api.get_calendar_panel_events()
-            #events_data = await self.api.get_calendar_events()
 
             if 'error' in events_data or resync:
                 msg = f"Panel events API error: {events_data['error']}" if not resync else "Resync calendar events"
@@ -132,10 +130,8 @@ class CalendarSyncWebhook(BaseWebhook):
                     self.logger.error("Failed to fetch monthly panel events")
                     return None
 
-            # Handle the new response format
             events = []
 
-            # The response should be a list with the first element containing the data
             if isinstance(events_data, list) and len(events_data) > 0:
                 response_item = events_data[0]
 
@@ -154,7 +150,6 @@ class CalendarSyncWebhook(BaseWebhook):
                 self.logger.warning(f"Unexpected response format: {type(events_data)}")
                 return None
 
-            # Return in expected format
             return {
                 'events': events,
                 'success': True
@@ -175,7 +170,6 @@ class CalendarSyncWebhook(BaseWebhook):
             if not self.session or not self.api:
                 raise RuntimeError("No active FIAP session or API")
 
-            # Get all days in the current month as timestamps
             day_timestamps = get_all_days_in_month()
             all_events = []
             seen_event_ids = set()
@@ -185,15 +179,13 @@ class CalendarSyncWebhook(BaseWebhook):
             for i, day_timestamp in enumerate(day_timestamps):
                 try:
                     self.logger.info(f"Fetching events for day {i+1}/{len(day_timestamps)} (timestamp: {day_timestamp})")
-                    
-                    # Get panel events for this specific day
+
                     day_events_data = await self.api.get_calendar_panel_events(time_search=day_timestamp)
                     
                     if 'error' in day_events_data:
                         self.logger.warning(f"Error fetching events for day {i+1}: {day_events_data['error']}")
                         continue
 
-                    # Process the response format
                     if isinstance(day_events_data, list) and len(day_events_data) > 0:
                         response_item = day_events_data[0]
                         
@@ -202,7 +194,7 @@ class CalendarSyncWebhook(BaseWebhook):
                             if 'data' in response_item:
                                 day_events = response_item['data']
                             elif isinstance(response_item, dict):
-                                day_events = [response_item]  # Single event case
+                                day_events = [response_item]
                             
                             # Add events to the collection, avoiding duplicates
                             for event in day_events:
@@ -216,8 +208,7 @@ class CalendarSyncWebhook(BaseWebhook):
                         else:
                             error_msg = response_item.get('error', 'Unknown error') if isinstance(response_item, dict) else str(response_item)
                             self.logger.warning(f"API returned error for day {i+1}: {error_msg}")
-                    
-                    # Add delay to avoid overwhelming the API
+
                     await asyncio.sleep(0.5)
                     
                 except Exception as e:
@@ -225,8 +216,7 @@ class CalendarSyncWebhook(BaseWebhook):
                     continue
 
             self.logger.info(f"Retrieved {len(all_events)} total unique events from monthly scan")
-            
-            # Return in the expected format
+
             return [{
                 'data': all_events,
                 'error': False
@@ -254,7 +244,6 @@ class CalendarSyncWebhook(BaseWebhook):
 
             self.logger.info(f"Processing {len(events)} total events from API")
 
-            # Load existing events
             existing_events = await self._load_existing_events()
 
             existing_ids = {event.get('id') for event in existing_events if event.get('id')}
@@ -267,14 +256,12 @@ class CalendarSyncWebhook(BaseWebhook):
                 if event_id:
                     if event_id not in unique_events:
                         unique_events[event_id] = event
-                    # Keep the event with more complete data (more keys)
                     elif len(event) > len(unique_events[event_id]):
                         unique_events[event_id] = event
 
             events = list(unique_events.values())
             self.logger.info(f"After deduplication: {len(events)} unique events")
 
-            # Filter new events
             new_events = []
             for event in events:
                 event_id = event.get('id')
@@ -286,7 +273,6 @@ class CalendarSyncWebhook(BaseWebhook):
                 else:
                     self.logger.warning(f"Event without ID found: {event}")
 
-            # Combine existing events with new unique events for storage
             all_events_for_storage = []
             
             # Add existing events first
@@ -296,20 +282,18 @@ class CalendarSyncWebhook(BaseWebhook):
                 if existing_id:
                     all_events_for_storage.append(existing_event)
                     existing_event_ids.add(existing_id)
-            
+
             # Add new events that don't already exist
             for event in events:
                 event_id = event.get('id')
                 if event_id and event_id not in existing_event_ids:
                     all_events_for_storage.append(event)
                 elif event_id and event_id in existing_event_ids:
-                    # Update existing event with potentially newer data
                     for i, existing_event in enumerate(all_events_for_storage):
                         if existing_event.get('id') == event_id:
                             all_events_for_storage[i] = event
                             break
 
-            # Save all events (existing + new/updated)
             await self._save_events(all_events_for_storage)
 
             self.logger.info(f"Found {len(new_events)} new events to process")
@@ -354,11 +338,9 @@ class CalendarSyncWebhook(BaseWebhook):
                 )
 
                 if 'error' not in details:
-                    # Handle the response format (should be list with data)
                     if isinstance(details, list) and len(details) > 0:
                         detail_item = details[0]
                         if isinstance(detail_item, dict) and not detail_item.get('error', False):
-                            # Merge basic event info with detailed info
                             if 'data' in detail_item:
                                 event.update(detail_item['data'])
                             else:
@@ -375,18 +357,14 @@ class CalendarSyncWebhook(BaseWebhook):
                     updated_events.append(event)
                 else:
                     self.logger.warning(f"Could not get details for event {event_id}: {details.get('error')}")
-                    # Still add the basic event info
                     updated_events.append(event)
 
-                # Add delay to avoid overwhelming the API
                 await asyncio.sleep(1)
 
             except Exception as e:
                 self.logger.error(f"Error fetching details for event {event.get('id', 'unknown')}: {e}")
-                # Add the basic event even if details failed
                 updated_events.append(event)
 
-        # Update stored events with detailed information
         if updated_events:
             await self._update_stored_events(updated_events)
 
@@ -442,14 +420,12 @@ class CalendarSyncWebhook(BaseWebhook):
         try:
             existing_events = await self._load_existing_events()
 
-            # Create a map for quick lookup
             updated_map = {}
             for event in updated_events:
                 event_id = event.get('id')
                 if event_id:
                     updated_map[event_id] = event
 
-            # Update existing events
             for i, event in enumerate(existing_events):
                 event_id = event.get('id')
                 if event_id in updated_map:
@@ -478,12 +454,27 @@ class CalendarSyncWebhook(BaseWebhook):
                 self.logger.error(f"Could not find Discord channel: {channel_id}")
                 return
 
+            updated_events = []
             for event in events:
-                embed, images = await self._create_event_embed(event)
-                await channel.send("📅 **Novo evento FIAP detectado!**", embed=embed, files=images)
+                try:
+                    embed, images = await self._create_event_embed(event)
+                    message = await channel.send("📅 **Novo evento FIAP detectado!**", embed=embed, files=images)
 
-                # Add delay between messages
-                await asyncio.sleep(1)
+                    event['discord_message_id'] = message.id
+                    event['discord_channel_id'] = channel.id
+                    event['notification_sent_at'] = datetime.now().timestamp()
+                    
+                    updated_events.append(event)
+                    self.logger.info(f"Notification sent for event {event.get('id')} - Message ID: {message.id}")
+
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error sending notification for event {event.get('id', 'unknown')}: {e}")
+                    continue
+
+            if updated_events:
+                await self._update_stored_events(updated_events)
 
         except Exception as e:
             self.logger.error(f"Error sending event notifications: {e}")
@@ -499,7 +490,6 @@ class CalendarSyncWebhook(BaseWebhook):
         Returns:
             Embed: Discord embed object
         """
-        # Handle different possible field names
         title = event.get('content', event.get('name', 'Evento sem título'))
         description = event.get('description', 'Sem descrição disponível')
 
@@ -514,7 +504,6 @@ class CalendarSyncWebhook(BaseWebhook):
             timestamp=datetime.now()
         )
 
-        # Add event details - handle both timeopen and timestart
         start_time = event.get('timeopen')
         end_time = event.get('timeclose')
         if start_time:
@@ -531,7 +520,6 @@ class CalendarSyncWebhook(BaseWebhook):
             except Exception:
                 pass
 
-        # Add formatted dates if available
         formatted_date = event.get('timeopen_formated')
         if formatted_date and not start_time:
             embed.add_field(
@@ -540,7 +528,6 @@ class CalendarSyncWebhook(BaseWebhook):
                 inline=True
             )
 
-        # Add event type
         event_type = event.get('type')
         if event_type:
             embed.add_field(
@@ -549,7 +536,6 @@ class CalendarSyncWebhook(BaseWebhook):
                 inline=True
             )
 
-        # Add course name if available
         course_name = event.get('course_name')
         if course_name:
             embed.add_field(
@@ -584,6 +570,185 @@ class CalendarSyncWebhook(BaseWebhook):
         embed.set_thumbnail(url="attachment://fiap-on.webp")
 
         return embed, images
+
+    async def _create_completed_event_embed(self, event: Dict[str, Any]) -> tuple[Embed, list[File]]:
+        """
+        Create Discord embed for a completed event.
+
+        Args:
+            event: Event data
+
+        Returns:
+            Embed: Discord embed object with completed styling
+        """
+        title = event.get('content', event.get('name', 'Evento sem título'))
+        description = event.get('description', 'Sem descrição disponível')
+
+        # Truncate description if too long
+        if len(description) > 2048:
+            description = description[:2045] + "..."
+
+        embed = Embed(
+            title=f"✅ {title}",
+            description=f"{description}\n\n**🏁 Evento Concluído**",
+            color=StatusColors.SUCCESS.value,
+            timestamp=datetime.now()
+        )
+
+        start_time = event.get('timeopen')
+        end_time = event.get('timeclose')
+        if start_time:
+            try:
+                if isinstance(start_time, (int, float)):
+                    start_dt = datetime.fromtimestamp(start_time)
+                    end_dt = datetime.fromtimestamp(end_time)
+
+                    embed.add_field(
+                        name="📅 Data/Hora (Concluído)",
+                        value=f'~~{start_dt.strftime("%d/%m/%Y às %H:%M")} até {end_dt.strftime("%H:%M")}~~',
+                        inline=True
+                    )
+            except Exception:
+                pass
+
+        formatted_date = event.get('timeopen_formated')
+        if formatted_date and not start_time:
+            embed.add_field(
+                name="📅 Data (Concluído)",
+                value=f"{formatted_date}",
+                inline=True
+            )
+
+        event_type = event.get('type')
+        if event_type:
+            embed.add_field(
+                name="📋 Tipo",
+                value=f"~~{'🛑 LIVE' if event_type == 'Live' else event_type}~~",
+                inline=True
+            )
+
+        course_name = event.get('course_name')
+        if course_name:
+            embed.add_field(
+                name="📚 Curso",
+                value=f"{course_name}",
+                inline=False
+            )
+
+        embed.add_field(
+            name="⏰ Concluído em",
+            value=datetime.now().strftime("%d/%m/%Y às %H:%M"),
+            inline=True
+        )
+
+        event_id = event.get('id')
+        if event_id:
+            embed.set_footer(text=f"ID do Evento: {event_id} • Status: Concluído")
+
+        images = [
+            discord.File(self.src_images / "fiap-on.webp", filename=f"fiap-on.webp"),
+            discord.File(self.src_images / "banner-fiap.png", filename=f"banner-fiap.png")
+        ]
+
+        embed.set_image(url="attachment://banner-fiap.png")
+        embed.set_thumbnail(url="attachment://fiap-on.webp")
+
+        return embed, images
+
+    async def check_expired_events(self) -> bool:
+        """
+        Check for expired events and update their Discord messages.
+
+        Returns:
+            bool: True if check was successful
+        """
+        try:
+            self.logger.info("Starting expired events check...")
+
+            events = await self._load_existing_events()
+            if not events:
+                self.logger.info("No events found for expiration check")
+                return True
+
+            current_time = datetime.now().timestamp()
+            expired_events = []
+            updated_events = []
+
+            # Find expired events that haven't been marked as completed yet
+            for event in events:
+                end_time = event.get('timeclose')
+                discord_message_id = event.get('discord_message_id')
+                is_completed = event.get('is_completed', False)
+
+                if is_completed:
+                    updated_events.append(event)
+                    continue
+
+                if end_time and discord_message_id and isinstance(end_time, (int, float)):
+                    if current_time > end_time:
+                        expired_events.append(event)
+                        self.logger.info(f"Found expired event: {event.get('id')} - {event.get('content')}")
+                    else:
+                        updated_events.append(event)
+                else:
+                    updated_events.append(event)
+
+            if not expired_events:
+                self.logger.info("No expired events found")
+                return True
+
+            channel_id = os.getenv('DISCORD_CALENDAR_CHANNEL_ID')
+            if not channel_id:
+                self.logger.warning("No Discord channel configured for notifications")
+                return False
+
+            channel = self.bot.get_channel(int(channel_id))
+            if not channel:
+                self.logger.error(f"Could not find Discord channel: {channel_id}")
+                return False
+
+            successfully_updated = []
+            for event in expired_events:
+                try:
+                    message_id = event['discord_message_id']
+                    message = await channel.fetch_message(message_id)
+
+                    completed_embed, images = await self._create_completed_event_embed(event)
+
+                    await message.edit(
+                        content="✅ **Evento FIAP concluído**",
+                        embed=completed_embed,
+                        attachments=images
+                    )
+
+                    event['is_completed'] = True
+                    event['completed_at'] = datetime.now().timestamp()
+                    
+                    successfully_updated.append(event)
+                    self.logger.info(f"Updated expired event message: {event.get('id')} - Message ID: {message_id}")
+
+                    await asyncio.sleep(1)
+                    
+                except discord.NotFound:
+                    self.logger.warning(f"Message not found for event {event.get('id')}: {message_id}")
+
+                    event['is_completed'] = True
+                    event['completed_at'] = datetime.now().timestamp()
+                    successfully_updated.append(event)
+                except Exception as e:
+                    self.logger.error(f"Error updating message for event {event.get('id')}: {e}")
+                    updated_events.append(event)
+
+            updated_events.extend(successfully_updated)
+
+            await self._save_events(updated_events)
+            
+            self.logger.info(f"Successfully updated {len(successfully_updated)} expired events")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error checking expired events: {e}")
+            return False
 
     async def _send_error_notification(self, error_message: str):
         """
