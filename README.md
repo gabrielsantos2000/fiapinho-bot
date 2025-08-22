@@ -50,6 +50,7 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
 - ✅ Detecção inteligente de novos eventos
 - ✅ Notificações com informações detalhadas (data, horário, links)
 - ✅ Suporte a diferentes tipos de eventos (aulas, provas, palestras)
+- ✅ **Inserção manual de eventos personalizados**
 - ✅ **Atualização automática de eventos concluídos**
 - ✅ **Verificação periódica de eventos expirados**
 
@@ -182,9 +183,50 @@ Após adicionar o bot ao seu servidor Discord, você pode começar a usar os com
 
 ```
 !fiap sync_calendar    # Força sincronização manual do calendário
+!fiap add_event        # Adiciona evento personalizado manualmente
 !reload <cog_name>     # Recarrega um cog específico (owner only)
 !cogs                  # Lista todos os cogs carregados (owner only)
 ```
+
+### 📝 Adicionando Eventos Manualmente
+
+O bot permite adicionar eventos personalizados que não estão no calendário FIAP oficial. Estes eventos seguem o mesmo formato e funcionalidades dos eventos automáticos.
+
+**Sintaxe do comando:**
+```
+!fiap add_event title="Título" description="Descrição" start="DD/MM/AAAA HH:MM" end="DD/MM/AAAA HH:MM" [opcionais]
+```
+
+**Parâmetros obrigatórios:**
+- `title` - Título do evento
+- `description` - Descrição detalhada do evento
+- `start` - Data e hora de início (formato: DD/MM/AAAA HH:MM)
+- `end` - Data e hora de fim (formato: DD/MM/AAAA HH:MM)
+
+**Parâmetros opcionais:**
+- `type` - Tipo do evento (padrão: "Custom")
+- `course` - Nome do curso relacionado
+- `teams` - Link do Microsoft Teams
+- `location` - Local do evento
+
+**Exemplos de uso:**
+```bash
+# Evento básico
+!fiap add_event title="Workshop Python" description="Workshop sobre desenvolvimento em Python" start="25/12/2024 14:00" end="25/12/2024 17:00"
+
+# Evento completo com todos os parâmetros
+!fiap add_event title="Prova P2" description="Segunda avaliação da disciplina" start="30/12/2024 19:30" end="30/12/2024 21:30" type="Prova" course="Análise e Desenvolvimento" location="Campus Vila Olímpia"
+
+# Evento com link do Teams
+!fiap add_event title="Aula Online" description="Aula sobre estruturas de dados" start="28/12/2024 20:00" end="28/12/2024 22:00" type="Aula" teams="https://teams.microsoft.com/l/meetup-join/..."
+```
+
+**Características dos eventos manuais:**
+- ✅ Aparecem no canal de calendário com notificação especial
+- ✅ São automaticamente marcados como concluídos quando expiram
+- ✅ Suportam todos os campos dos eventos FIAP (data, tipo, curso, links)
+- ✅ Ficam armazenados junto com eventos automáticos
+- ✅ ID único para rastreamento (formato: `manual_timestamp_hash`)
 
 ### 📅 Funcionalidades Automáticas
 
@@ -219,6 +261,7 @@ O bot executa automaticamente as seguintes tarefas:
 | `fiap sync_calendar` | Força sincronização manual | Admin |
 | `fiap events_monthly` | Exibe eventos do mês | Admin |
 | `fiap check_expired` | Verifica e atualiza eventos expirados | Admin |
+| `fiap add_event` | Adiciona evento manualmente | Admin |
 
 ### ⚙️ Comandos Administrativos
 
