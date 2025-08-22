@@ -244,7 +244,7 @@ class CalendarSyncWebhook(BaseWebhook):
 
             self.logger.info(f"Processing {len(events)} total events from API")
 
-            existing_events = await self._load_existing_events()
+            existing_events = await self.load_existing_events()
 
             existing_ids = {event.get('id') for event in existing_events if event.get('id')}
             self.logger.info(f"Found {len(existing_ids)} existing events in database")
@@ -294,7 +294,7 @@ class CalendarSyncWebhook(BaseWebhook):
                             all_events_for_storage[i] = event
                             break
 
-            await self._save_events(all_events_for_storage)
+            await self.save_events(all_events_for_storage)
 
             self.logger.info(f"Found {len(new_events)} new events to process")
             self.logger.info(f"Saved {len(all_events_for_storage)} total events to database")
@@ -370,7 +370,7 @@ class CalendarSyncWebhook(BaseWebhook):
 
         return updated_events
 
-    async def _load_existing_events(self) -> List[Dict[str, Any]]:
+    async def load_existing_events(self) -> List[Dict[str, Any]]:
         """
         Load existing events from storage.
 
@@ -391,7 +391,7 @@ class CalendarSyncWebhook(BaseWebhook):
             self.logger.error(f"Error loading existing events: {e}")
             return []
 
-    async def _save_events(self, events: List[Dict[str, Any]]):
+    async def save_events(self, events: List[Dict[str, Any]]):
         """
         Save events to monthly file.
 
@@ -418,7 +418,7 @@ class CalendarSyncWebhook(BaseWebhook):
             updated_events: Events with updated information
         """
         try:
-            existing_events = await self._load_existing_events()
+            existing_events = await self.load_existing_events()
 
             updated_map = {}
             for event in updated_events:
@@ -431,7 +431,7 @@ class CalendarSyncWebhook(BaseWebhook):
                 if event_id in updated_map:
                     existing_events[i] = updated_map[event_id]
 
-            await self._save_events(existing_events)
+            await self.save_events(existing_events)
 
         except Exception as e:
             self.logger.error(f"Error updating stored events: {e}")
@@ -457,7 +457,7 @@ class CalendarSyncWebhook(BaseWebhook):
             updated_events = []
             for event in events:
                 try:
-                    embed, images = await self._create_event_embed(event)
+                    embed, images = await self.create_event_embed(event)
                     message = await channel.send("📅 **Novo evento FIAP detectado!**", embed=embed, files=images)
 
                     event['discord_message_id'] = message.id
@@ -480,7 +480,7 @@ class CalendarSyncWebhook(BaseWebhook):
             self.logger.error(f"Error sending event notifications: {e}")
 
 
-    async def _create_event_embed(self, event: Dict[str, Any]) -> tuple[Embed, list[Any]]:
+    async def create_event_embed(self, event: Dict[str, Any]) -> tuple[Embed, list[Any]]:
         """
         Create Discord embed for an event.
 
@@ -665,7 +665,7 @@ class CalendarSyncWebhook(BaseWebhook):
         try:
             self.logger.info("Starting expired events check...")
 
-            events = await self._load_existing_events()
+            events = await self.load_existing_events()
             if not events:
                 self.logger.info("No events found for expiration check")
                 return True
@@ -741,7 +741,7 @@ class CalendarSyncWebhook(BaseWebhook):
 
             updated_events.extend(successfully_updated)
 
-            await self._save_events(updated_events)
+            await self.save_events(updated_events)
             
             self.logger.info(f"Successfully updated {len(successfully_updated)} expired events")
             return True

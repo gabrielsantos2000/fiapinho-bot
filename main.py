@@ -128,7 +128,7 @@ class FiapinhoBot(commands.Bot):
         """Wait for bot to be ready before starting the sync task."""
         await self.wait_until_ready()
 
-    @tasks.loop(minutes=int(os.getenv('EVENT_EXPIRATION_CHECK_HOURS', '2')))
+    @tasks.loop(hours=int(os.getenv('EVENT_EXPIRATION_CHECK_HOURS', '4')))
     async def check_expired_events_task(self):
         """Periodic task to check for expired events and update their messages."""
         try:
