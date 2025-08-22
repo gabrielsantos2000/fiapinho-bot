@@ -114,9 +114,9 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
    cp .env.example .env
    ```
    
-   Edite o arquivo `.env` com suas configurações:
+      Edite o arquivo `.env` com suas configurações:
    ```env
-  # Discord Bot Configuration
+      # Discord Bot Configuration
       DISCORD_BOT_TOKEN=seu_token_aqui
       DISCORD_MONITORING_CHANNEL_ID=id_do_canal_monitoria
       DISCORD_CALENDAR_CHANNEL_ID=id_do_canal_calendario
