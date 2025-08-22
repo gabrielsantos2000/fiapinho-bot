@@ -50,6 +50,8 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
 - ✅ Detecção inteligente de novos eventos
 - ✅ Notificações com informações detalhadas (data, horário, links)
 - ✅ Suporte a diferentes tipos de eventos (aulas, provas, palestras)
+- ✅ **Atualização automática de eventos concluídos**
+- ✅ **Verificação periódica de eventos expirados**
 
 ### 🎛️ Comandos Administrativos
 - ✅ Sincronização manual do calendário
@@ -128,16 +130,19 @@ O **Fiapinho Bot** é um bot Discord desenvolvido especificamente para estudante
       FIAP_LOGIN_URL=https://on.fiap.com.br/index.php
       FIAP_API_BASE=https://on.fiap.com.br/lib/ajax/service.php
       
-      # Bot Configuration
-      BOT_PREFIX=!
-      
-      # Webhook Configuration
-      WEBHOOK_INTERVAL_HOURS=60
-      MAX_LOGIN_RETRIES=3
-      
-      # Logging
-      LOG_LEVEL=INFO
-      LOG_FILE=logs/bot.log
+   # Bot Configuration
+   BOT_PREFIX=!
+   
+   # Webhook Configuration
+   WEBHOOK_INTERVAL_HOURS=60
+   MAX_LOGIN_RETRIES=3
+   
+   # Event Management Configuration
+   EVENT_EXPIRATION_CHECK_HOURS=4
+   
+   # Logging
+   LOG_LEVEL=INFO
+   LOG_FILE=logs/bot.log
    ```
 
 4. **Execute o bot**
@@ -188,6 +193,8 @@ O bot executa automaticamente as seguintes tarefas:
 - **Sincronização Periódica**: A cada 24 horas (configurável)
 - **Detecção de Novos Eventos**: Compara com eventos já conhecidos
 - **Notificações Automáticas**: Envia alertas para o canal configurado
+- **Verificação de Eventos Expirados**: A cada 4 horas (configurável), verifica e atualiza mensagens de eventos que já passaram
+- **Atualização Automática de Mensagens**: Marca eventos concluídos nas mensagens existentes do Discord
 
 ---
 
@@ -211,6 +218,7 @@ O bot executa automaticamente as seguintes tarefas:
 | `fiap` | Menu principal dos comandos FIAP | Todos |
 | `fiap sync_calendar` | Força sincronização manual | Admin |
 | `fiap events_monthly` | Exibe eventos do mês | Admin |
+| `fiap check_expired` | Verifica e atualiza eventos expirados | Admin |
 
 ### ⚙️ Comandos Administrativos
 

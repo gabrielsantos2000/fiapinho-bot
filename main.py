@@ -73,6 +73,10 @@ class FiapinhoBot(commands.Bot):
         # Start webhooks tasks
         if not self.sync_calendar_task.is_running():
             self.sync_calendar_task.start()
+            
+        # Start event expiration checking task
+        if not self.check_expired_events_task.is_running():
+            self.check_expired_events_task.start()
 
     async def load_cogs(self):
         """Load all cogs."""
@@ -87,14 +91,6 @@ class FiapinhoBot(commands.Bot):
         """Called when the bot has successfully logged in."""
         self.logger.info(f'{self.user} has connected to Discord!')
         self.logger.info(f'Bot is in {len(self.guilds)} guilds')
-        
-        # Debug: List all commands
-        all_commands = [cmd.name for cmd in self.commands]
-        self.logger.info(f'Loaded commands: {all_commands}')
-        
-        # Debug: List all cogs
-        loaded_cogs = list(self.cogs.keys())
-        self.logger.info(f'Loaded cogs: {loaded_cogs}')
 
         # Set bot status
         await self.change_presence(
@@ -111,7 +107,6 @@ class FiapinhoBot(commands.Bot):
 
         self.logger.error(f'Command error in {ctx.command}: {error}')
 
-        # Send user-friendly error message
         embed = discord.Embed(
             title="❌ Erro no Comando",
             description=f"Ocorreu um erro: {str(error)}",
@@ -133,11 +128,31 @@ class FiapinhoBot(commands.Bot):
         """Wait for bot to be ready before starting the sync task."""
         await self.wait_until_ready()
 
+    @tasks.loop(minutes=int(os.getenv('EVENT_EXPIRATION_CHECK_HOURS', '2')))
+    async def check_expired_events_task(self):
+        """Periodic task to check for expired events and update their messages."""
+        try:
+            self.logger.info("Starting expired events check task...")
+            webhook = self.webhook_manager.webhooks.get('sync_calendar')
+            if webhook:
+                await webhook.check_expired_events()
+            else:
+                self.logger.warning("Calendar webhook not found for expired events check")
+        except Exception as e:
+            self.logger.error(f"Error in expired events check task: {e}")
+
+    @check_expired_events_task.before_loop
+    async def before_check_expired_events_task(self):
+        """Wait for bot to be ready before starting the expired events check task."""
+        await self.wait_until_ready()
+
     async def close(self):
         """Clean shutdown of the bot."""
         self.logger.info("Shutting down Fiapinho bot...")
         if self.sync_calendar_task.is_running():
             self.sync_calendar_task.cancel()
+        if self.check_expired_events_task.is_running():
+            self.check_expired_events_task.cancel()
         await super().close()
 
     # ==================== ADMIN COMMANDS ====================
@@ -229,7 +244,6 @@ class FiapinhoBot(commands.Bot):
 
         await ctx.send(embed=embed)
 
-    # Custom help command
     @commands.command(name='help_fiapinho')
     async def help_command(self, ctx, *, command_name: str = None):
         """Custom help command with better formatting."""
@@ -260,14 +274,12 @@ class FiapinhoBot(commands.Bot):
                     inline=False
                 )
         else:
-            # Show general help
             embed = discord.Embed(
                 title="🤖 Comandos do Fiapinho Bot",
                 description="Lista de comandos disponíveis:",
                 color=StatusColors.INFO_GREEN.value
             )
 
-            # Show main bot commands
             main_commands = [cmd.name for cmd in self.commands if not cmd.hidden]
             if main_commands:
                 embed.add_field(
@@ -298,13 +310,11 @@ def main():
     setup_logging()
     logger = logging.getLogger('main')
 
-    # Check for required environment variables
     token = os.getenv('DISCORD_BOT_TOKEN')
     if not token:
         logger.error("DISCORD_BOT_TOKEN is required! Please check your .env file.")
         return
 
-    # Create and run bot
     bot = FiapinhoBot()
 
     try:

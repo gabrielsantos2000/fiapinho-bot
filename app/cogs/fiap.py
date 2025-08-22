@@ -16,6 +16,7 @@ class FiapinhoCog(commands.Cog):
         self.prefix = os.getenv('BOT_PREFIX')
         self.subcommands_fiap_group = [
             ("sync_calendar", "Sincronizar calendário"),
+            ("check_expired", "Atualiza os eventos já expirados"),
             ("events_montly", "Mostrar eventos recentes"),
             ("events_today", "Mostrar eventos de hoje"),
             ("events_week", "Mostrar eventos da semana"),
@@ -44,7 +45,8 @@ class FiapinhoCog(commands.Cog):
     @fiap_group.command(name='sync_calendar', help='Realiza a sincronização do calendário')
     async def sync_calendar(self, ctx:commands.Context):
         """Manually trigger calendar sync."""
-        if not ctx.author.get_role(Roles.ADMINISTRATOR.value):
+        self.logger.info(f"Is owner {not commands.is_owner()}")
+        if not commands.is_owner():
             embed = discord.Embed(
                 title="❌ Esse comando só pode ser executado por administradores",
                 color=FiapColors.RED.value
@@ -100,6 +102,63 @@ class FiapinhoCog(commands.Cog):
 
             await ctx.send(embed=embed)
             return
+
+    @fiap_group.command(name='check_expired', description='Verifica e atualiza eventos expirados')
+    async def check_expired_events(self, ctx: commands.Context):
+        """Manually trigger expired events check."""
+        if not ctx.author.get_role(Roles.ADMINISTRATOR.value):
+            embed = discord.Embed(
+                title='❌ Esse comando só pode ser executado por administradores',
+                color=FiapColors.RED.value
+            )
+            await ctx.send(embed=embed)
+            return
+
+        self.logger.info(f"Manual expired events check requested by {ctx.author}")
+
+        embed = discord.Embed(
+            title="🔍 Verificando Eventos Expirados",
+            description="Verificando eventos expirados e atualizando mensagens...",
+            color=StatusColors.INFO_BLUE.value
+        )
+        message = await ctx.send(embed=embed)
+
+        try:
+            webhook = self.bot.webhook_manager.webhooks.get('sync_calendar')
+            if not webhook:
+                embed = discord.Embed(
+                    title="❌ Webhook Não Encontrado",
+                    description="Webhook do calendário não foi encontrado.",
+                    color=StatusColors.ERROR.value
+                )
+                await message.edit(embed=embed)
+                return
+
+            result = await webhook.check_expired_events()
+
+            if result:
+                embed = discord.Embed(
+                    title="✅ Verificação Concluída",
+                    description="Eventos expirados verificados e atualizados com sucesso!",
+                    color=StatusColors.SUCCESS.value
+                )
+            else:
+                embed = discord.Embed(
+                    title="⚠️ Erro na Verificação",
+                    description="Erro durante a verificação de eventos expirados. Verifique os logs para detalhes.",
+                    color=StatusColors.ERROR.value
+                )
+
+            await message.edit(embed=embed)
+
+        except Exception as e:
+            self.logger.error(f"Error in manual expired events check command: {e}")
+            embed = discord.Embed(
+                title="⚠️ Erro Inesperado",
+                description=f"Ocorreu um erro: {str(e)}",
+                color=StatusColors.ERROR.value
+            )
+            await message.edit(embed=embed)
 
 
 async def setup(bot):
